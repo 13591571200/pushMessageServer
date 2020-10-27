@@ -1,0 +1,10 @@
+wechat:
+  webhook:
+    url: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=6c33f72b-0d15-4c99-a7bf-2f110fd4dc9e"
+
+local:
+  server:
+    ip: 192.168.102.27
+
+server:
+  port: 8888
