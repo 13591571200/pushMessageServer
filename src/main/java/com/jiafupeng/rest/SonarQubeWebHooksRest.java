@@ -197,6 +197,32 @@ public class SonarQubeWebHooksRest {
      * @param status
      * @return
      */
+    private String getstatuswithcolor2(String status){
+        if("OK".equalsIgnoreCase(status)){
+            return "<font color='info'>通过</font>";
+        }
+
+        return "<font color='warning'>未通过</font>";
+    }
+
+    /**
+     * 添加markdown语法 字体变色
+     * @param status
+     * @return
+     */
+    private String getstatusWitcolor1(String status){
+        if("OK".equalsIgnoreCase(status)){
+            return "<font color='info'>通过</font>";
+        }
+
+        return "<font color='warning'>未通过</font>";
+    }
+
+    /**
+     * 添加markdown语法 字体变色
+     * @param status
+     * @return
+     */
     private String getStatusWithColor(String value, String status){
         if("NO_VALUE".equalsIgnoreCase(status)){
             return "<font color='commont'>空</font>";
