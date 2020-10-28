@@ -115,20 +115,10 @@ public class SonarQubeWebHooksRest {
                     testReportDTO.setMaintainability(value);
                     testReportDTO.setMaintainabilityStatus(status);
                     break;
-                // 代码覆盖率
-                case "new_coverage":
-                    testReportDTO.setCoverage(value);
-                    testReportDTO.setCoverageStatus(status);
-                    break;
                 // 重复率
                 case "new_duplicated_lines_density":
                     testReportDTO.setDuplicated(value);
                     testReportDTO.setDuplicatedStatus(status);
-                    break;
-                // 安全热点
-                case "new_security_hotspots_reviewed":
-                    testReportDTO.setHotspots(value);
-                    testReportDTO.setHotspotsStatus(status);
                     break;
                 default:;
             }
@@ -171,9 +161,7 @@ public class SonarQubeWebHooksRest {
         sb.append("> **可靠性(bugs)**: ").append(getStatusWithColor(testReportDTO.getReliability(), testReportDTO.getReliabilityStatus())).append("\r\n");
         sb.append("> **安全性(漏洞)**: ").append(getStatusWithColor(testReportDTO.getSecurity(), testReportDTO.getSecurityStatus())).append("\r\n");
         sb.append("> **可维护性(异样)**: ").append(getStatusWithColor(testReportDTO.getMaintainability(), testReportDTO.getMaintainabilityStatus())).append("\r\n");
-        sb.append("> **代码覆盖率**: ").append(getStatusWithColor(testReportDTO.getCoverage(), testReportDTO.getCoverageStatus())).append("\r\n");
         sb.append("> **代码重复率**: ").append(getStatusWithColor(testReportDTO.getDuplicated(), testReportDTO.getDuplicatedStatus())).append("\r\n");
-        sb.append("> **安全复审(安全热点)**: ").append(getStatusWithColor(testReportDTO.getHotspots(), testReportDTO.getHotspotsStatus())).append("\r\n");
         sb.append("--- \r\n");
         sb.append(" 详细检测结果请[点击查看](").append(getTransformUrl(testReportDTO.getSonarQubeProjectUrl())).append(")");
         return sb.toString();
