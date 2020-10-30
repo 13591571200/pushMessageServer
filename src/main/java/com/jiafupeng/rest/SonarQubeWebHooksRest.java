@@ -52,13 +52,44 @@ public class SonarQubeWebHooksRest {
         // 获取检测报告数据
         TestReportDTO testReport = getTestReport(paramMaps);
         log.info("testReport: " + testReport);
-        // 构建wechat机器人 post请求 body 数据(支持markdown)
-        Map<String, Object> sendBodyMap = buildSendBody(CommitInfo, testReport);
-        log.info("sendBodyMap: " + sendBodyMap);
-        // 实际发送
-        ResponseEntity responseEntity = restTemplate.postForEntity(wechatWebhookUrl, new HttpEntity(sendBodyMap, new HttpHeaders()), String.class);
-        log.info("call wechat robots status: " + responseEntity.getStatusCode() + ", response body: " + responseEntity.getBody());
+        // 推送检测信息至企业微信
+        pushMessageToEnterpriseWechat(CommitInfo, testReport);
         return HttpStatus.OK.toString();
+    }
+
+    /**
+     * 推送检测信息至企业微信
+     * @param CommitInfo 提交人信息
+     * @param testReport 检测报告信息
+     */
+    private void pushMessageToEnterpriseWechat(CommitInfoDTO CommitInfo, TestReportDTO testReport){
+        // 构建wechat机器人 post请求 body 数据(支持markdown)
+        Map<String, Object> sendTestReportBodyMap = buildSendTestReportBody(CommitInfo, testReport);
+        log.info("sendTestReportBodyMap: " + sendTestReportBodyMap);
+        ResponseEntity responseEntity = restTemplate.postForEntity(wechatWebhookUrl, new HttpEntity(sendTestReportBodyMap, new HttpHeaders()), String.class);
+        log.info("call wechat robots status: " + responseEntity.getStatusCode() + ", response body: " + responseEntity.getBody());
+
+        // 发送提示修改
+        if(!"OK".equals(testReport.getStatus())){
+            Map<String, Object> sendRemindModifyBodyMap = buildSendRemindModifyBody(CommitInfo.getUserEmail());
+            ResponseEntity mentionedResponseEntity = restTemplate.postForEntity(wechatWebhookUrl, new HttpEntity(sendRemindModifyBodyMap, new HttpHeaders()), String.class);
+            log.info("call wechat robots [mentioned_list] status: " + mentionedResponseEntity.getStatusCode() + ", response body: " + mentionedResponseEntity.getBody());
+        }
+    }
+
+    /**
+     * 构建修改提醒信息
+     * @param userEmail 提交人邮箱
+     * @return
+     */
+    private Map<String, Object> buildSendRemindModifyBody(String userEmail){
+        Map<String, Object> resultMap = new HashMap<>(16);
+        resultMap.put("msgtype","text");
+        Map<String, Object> textMap = new HashMap<>(16);
+        textMap.put("content","请及时修改.");
+        textMap.put("mentioned_list",new String[]{userEmail.substring(0, userEmail.indexOf("@"))});
+        resultMap.put("text", textMap);
+        return resultMap;
     }
 
     /**
@@ -117,6 +148,9 @@ public class SonarQubeWebHooksRest {
                     break;
                 // 重复率
                 case "new_duplicated_lines_density":
+                    if(!StringUtils.isEmpty(value) && value.contains(".") && value.length() > 4){
+                        value = value.substring(0, value.indexOf(".") + 3) + "%";
+                    }
                     testReportDTO.setDuplicated(value);
                     testReportDTO.setDuplicatedStatus(status);
                     break;
@@ -133,7 +167,7 @@ public class SonarQubeWebHooksRest {
      * @param testReport
      * @return
      */
-    private Map<String, Object> buildSendBody(CommitInfoDTO CommitInfo, TestReportDTO testReport){
+    private Map<String, Object> buildSendTestReportBody(CommitInfoDTO CommitInfo, TestReportDTO testReport){
         Map<String, Object> sendBodyMap = new HashMap<>(16);
         sendBodyMap.put("msgtype","markdown");
         Map<String, Object> ContentMap = new HashMap<>(16);
@@ -173,32 +207,6 @@ public class SonarQubeWebHooksRest {
      * @return
      */
     private String getStatusWithColor(String status){
-        if("OK".equalsIgnoreCase(status)){
-            return "<font color='info'>通过</font>";
-        }
-
-        return "<font color='warning'>未通过</font>";
-    }
-
-    /**
-     * 添加markdown语法 字体变色
-     * @param status
-     * @return
-     */
-    private String getstatuswithcolor2(String status){
-        if("OK".equalsIgnoreCase(status)){
-            return "<font color='info'>通过</font>";
-        }
-
-        return "<font color='warning'>未通过</font>";
-    }
-
-    /**
-     * 添加markdown语法 字体变色
-     * @param status
-     * @return
-     */
-    private String getstatusWitcolor1(String status){
         if("OK".equalsIgnoreCase(status)){
             return "<font color='info'>通过</font>";
         }
