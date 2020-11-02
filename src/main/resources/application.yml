@@ -1,10 +1,10 @@
 wechat:
   webhook:
-    url: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=6c33f72b-0d15-4c99-a7bf-2f110fd4dc9e"
+    url: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=fbefdbe3-a9f5-4926-9e24-302904b3831a"
 
-local:
+sonarQube:
   server:
-    ip: 192.168.102.27
+    url: 192.168.102.27:9000
 
 server:
   port: 8888

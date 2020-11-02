@@ -18,9 +18,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestTemplate;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * @author jiafupeng
@@ -40,8 +39,8 @@ public class SonarQubeWebHooksRest {
     @Value("${wechat.webhook.url}")
     private String wechatWebhookUrl;
 
-    @Value("${local.server.ip}")
-    private String localServerIp;
+    @Value("${sonarQube.server.url}")
+    private String sonarQubeServerUrl;
 
     @PostMapping("/receive")
     public String receive(@RequestBody Map<String, Object> paramMaps){
@@ -52,9 +51,35 @@ public class SonarQubeWebHooksRest {
         // 获取检测报告数据
         TestReportDTO testReport = getTestReport(paramMaps);
         log.info("testReport: " + testReport);
+        HistoryTestReportDTO historyTestReport = getHistoryTestReport(paramMaps);
         // 推送检测信息至企业微信
-        pushMessageToEnterpriseWechat(CommitInfo, testReport);
+        pushMessageToEnterpriseWechat(CommitInfo, testReport, historyTestReport);
         return HttpStatus.OK.toString();
+    }
+
+    /**
+     * 获取项目遗留问题
+     * @param paramMaps
+     * @return
+     */
+    private HistoryTestReportDTO getHistoryTestReport(Map<String, Object> paramMaps){
+        Map<String, String> projectMap = (Map)paramMaps.get("project");
+        String projectKey = projectMap.get("key");
+        String sonarQubeIssuesRestApi = "http://" + sonarQubeServerUrl + "/api/issues/search?facets=types&resolved=false&componentKeys=" + projectKey;
+        Map<String, Object> map = restTemplate.getForObject(sonarQubeIssuesRestApi, Map.class);
+        List<Map> facetsList = (List)map.get("facets");
+        List<Map> valuesList = (List)facetsList.get(0).get("values");
+        HistoryTestReportDTO historyTestReportDTO = new HistoryTestReportDTO();
+        valuesList.stream().forEach(o -> {
+            switch (o.get("val").toString()) {
+                case "BUG": historyTestReportDTO.setBugsCount(o.get("count").toString()); break;
+                case "VULNERABILITY": historyTestReportDTO.setVulnerabilityCount(o.get("count").toString()); break;
+                case "CODE_SMELL": historyTestReportDTO.setCodeSmellCount(o.get("count").toString()); break;
+                default: ;
+            }
+        });
+
+        return historyTestReportDTO;
     }
 
     /**
@@ -62,9 +87,9 @@ public class SonarQubeWebHooksRest {
      * @param CommitInfo 提交人信息
      * @param testReport 检测报告信息
      */
-    private void pushMessageToEnterpriseWechat(CommitInfoDTO CommitInfo, TestReportDTO testReport){
+    private void pushMessageToEnterpriseWechat(CommitInfoDTO CommitInfo, TestReportDTO testReport, HistoryTestReportDTO historyTestReport){
         // 构建wechat机器人 post请求 body 数据(支持markdown)
-        Map<String, Object> sendTestReportBodyMap = buildSendTestReportBody(CommitInfo, testReport);
+        Map<String, Object> sendTestReportBodyMap = buildSendTestReportBody(CommitInfo, testReport, historyTestReport);
         log.info("sendTestReportBodyMap: " + sendTestReportBodyMap);
         ResponseEntity responseEntity = restTemplate.postForEntity(wechatWebhookUrl, new HttpEntity(sendTestReportBodyMap, new HttpHeaders()), String.class);
         log.info("call wechat robots status: " + responseEntity.getStatusCode() + ", response body: " + responseEntity.getBody());
@@ -167,11 +192,11 @@ public class SonarQubeWebHooksRest {
      * @param testReport
      * @return
      */
-    private Map<String, Object> buildSendTestReportBody(CommitInfoDTO CommitInfo, TestReportDTO testReport){
+    private Map<String, Object> buildSendTestReportBody(CommitInfoDTO CommitInfo, TestReportDTO testReport, HistoryTestReportDTO historyTestReport){
         Map<String, Object> sendBodyMap = new HashMap<>(16);
         sendBodyMap.put("msgtype","markdown");
         Map<String, Object> ContentMap = new HashMap<>(16);
-        String content = markDownTemplate(CommitInfo, testReport);
+        String content = markDownTemplate(CommitInfo, testReport, historyTestReport);
         ContentMap.put("content",content);
         ContentMap.put("mentioned_list", new String[]{CommitInfo.getUserName()});
         sendBodyMap.put("markdown",ContentMap);
@@ -184,18 +209,23 @@ public class SonarQubeWebHooksRest {
      * @param testReportDTO
      * @return
      */
-    private String markDownTemplate(CommitInfoDTO commitInfoDTO, TestReportDTO testReportDTO){
+    private String markDownTemplate(CommitInfoDTO commitInfoDTO, TestReportDTO testReportDTO, HistoryTestReportDTO historyTestReport){
         StringBuilder sb = new StringBuilder();
         sb.append("### DM 代码检测通知\r\n");
+        sb.append("- 本次检测结果\r\n");
         sb.append("> **项目**: ").append(commitInfoDTO.getProjectPath()).append("\r\n");
         sb.append("> **分支**: ").append(commitInfoDTO.getBranchName()).append("\r\n");
         sb.append("> **提交人信息**: ").append(commitInfoDTO.getUserName()).append(" / ").append(commitInfoDTO.getUserEmail()).append("\r\n");
         sb.append("> **提交时间**: ").append(testReportDTO.getAnalysisStartTime()).append("\r\n");
         sb.append("> **是否通过**: ").append(getStatusWithColor(testReportDTO.getStatus())).append("\r\n");;
-        sb.append("> **可靠性(bugs)**: ").append(getStatusWithColor(testReportDTO.getReliability(), testReportDTO.getReliabilityStatus())).append("\r\n");
+        sb.append("> **可靠性(Bugs)**: ").append(getStatusWithColor(testReportDTO.getReliability(), testReportDTO.getReliabilityStatus())).append("\r\n");
         sb.append("> **安全性(漏洞)**: ").append(getStatusWithColor(testReportDTO.getSecurity(), testReportDTO.getSecurityStatus())).append("\r\n");
         sb.append("> **可维护性(异样)**: ").append(getStatusWithColor(testReportDTO.getMaintainability(), testReportDTO.getMaintainabilityStatus())).append("\r\n");
         sb.append("> **代码重复率**: ").append(getStatusWithColor(testReportDTO.getDuplicated(), testReportDTO.getDuplicatedStatus())).append("\r\n");
+        sb.append("- 项目遗留问题\r\n");
+        sb.append("> **Bugs**: ").append(getCountWithColor(historyTestReport.getBugsCount())).append("\r\n");
+        sb.append("> **漏洞**: ").append(getCountWithColor(historyTestReport.getVulnerabilityCount())).append("\r\n");
+        sb.append("> **异样**: ").append(getCountWithColor(historyTestReport.getCodeSmellCount())).append("\r\n");
         sb.append("--- \r\n");
         sb.append(" 详细检测结果请[点击查看](").append(getTransformUrl(testReportDTO.getSonarQubeProjectUrl())).append(")");
         return sb.toString();
@@ -256,13 +286,26 @@ public class SonarQubeWebHooksRest {
     }
 
     /**
+     * 返回的数字带颜色
+     * @param value
+     * @return
+     */
+    private String getCountWithColor(String value){
+        if("0".equals(value)){
+            return value;
+        }
+
+        return "<font color='warning'>" + value + "</font>";
+    }
+
+    /**
      * 转换localhost => 真实IP
      * TODO 非常不好，后续优化
      * @param originalUrl
      * @return
      */
     private String getTransformUrl(String originalUrl){
-        return originalUrl.replaceAll("localhost", localServerIp);
+        return originalUrl.replaceAll("localhost", sonarQubeServerUrl.substring(0, sonarQubeServerUrl.indexOf(":")));
     }
 
     /**
@@ -360,5 +403,30 @@ public class SonarQubeWebHooksRest {
          * 安全热点状态
          */
         private String hotspotsStatus;
+    }
+
+    /**
+     * 历史检测信息
+     */
+    @Data
+    @Builder
+    @AllArgsConstructor
+    @NoArgsConstructor
+    private static class HistoryTestReportDTO{
+
+        /**
+         * Bug个数
+         */
+        private String bugsCount;
+
+        /**
+         * 漏洞个数
+         */
+        private String vulnerabilityCount;
+
+        /**
+         * 异味个数
+         */
+        private String codeSmellCount;
     }
 }
